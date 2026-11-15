@@ -1,0 +1,15 @@
+# Build outputs
+*.zip
+*.sha256
+build_tmp/
+
+# Module runtime & temporary files
+modules/daemon.pid
+modules/history.log
+modules/current_pkg
+modules/current_profile
+*.bak
+
+# OS specific files
+.DS_Store
+Thumbs.db

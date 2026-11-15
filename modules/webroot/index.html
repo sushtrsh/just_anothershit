@@ -1,0 +1,910 @@
+﻿<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1, user-scalable=no">
+  <title>Kernel Manager</title>
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+<div class="container">
+
+  <header>
+    <div class="brand">
+      <div class="logo-badge" title="Kernel Manager">
+        <svg viewBox="0 0 24 24" width="34" height="34" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+
+          <line x1="8" y1="2" x2="6" y2="5" />
+          <line x1="16" y1="2" x2="18" y2="5" />
+
+          <path d="M4 11a8 8 0 0 1 16 0v2H4v-2z" />
+
+          <line x1="8" y1="8.5" x2="10" y2="10.5" />
+          <line x1="10" y1="8.5" x2="8" y2="10.5" />
+          <line x1="14" y1="8.5" x2="16" y2="10.5" />
+          <line x1="16" y1="8.5" x2="14" y2="10.5" />
+
+          <path d="M11 5.5l1.5 2-1 1.5h1.5" stroke-width="1.5" />
+        </svg>
+      </div>
+      <div class="brand-title">
+        <h1>Kernel Manager</h1>
+        <p>Helio G99 • BORE • UCLAMP • GED</p>
+      </div>
+    </div>
+    <div class="header-pills">
+      <span id="pill-daemon" class="pill-dot active" title="Daemon Aktif"></span>
+      <button id="btn-lang-toggle" class="lang-btn" title="Ganti Bahasa / Switch Language" onclick="toggleLanguage()">
+        <span class="lang-icon">🌐</span>
+        <span id="lang-code-text" class="lang-badge">ID</span>
+      </button>
+    </div>
+  </header>
+
+  <main id="view-dashboard" class="view-content active">
+
+    <div class="hero-banner">
+      <div class="hero-top">
+        <div>
+          <div class="hero-label" data-i18n="hero_prof_label">Profil Kernel Aktif</div>
+          <div class="hero-val">
+            <span id="hero-profile-name">Balanced</span>
+            <span id="hero-profile-tag" class="prof-tag prof-balanced">balanced</span>
+          </div>
+        </div>
+        <div style="text-align: right;">
+          <div class="hero-label" data-i18n="hero_mode_label">Mode Kontrol</div>
+          <div id="hero-mode-text" style="font-size: 13px; font-weight: 700; color: var(--accent);">Dinamis (Per-App)</div>
+        </div>
+      </div>
+      <div class="hero-meta">
+        <div class="hero-meta-item"><span data-i18n="hero_app_label">Aplikasi:</span> <strong id="hero-fg-pkg">com.android.launcher</strong></div>
+        <div class="hero-meta-item"><span data-i18n="hero_bat_label">Baterai:</span> <strong id="hero-battery">--%</strong></div>
+        <div class="hero-meta-item"><span data-i18n="hero_temp_label">Suhu CPU:</span> <strong id="hero-cpu-temp">--°C</strong></div>
+      </div>
+    </div>
+
+    <div class="card" style="display: none; margin-bottom: 14px; border-left: 3px solid var(--accent);" aria-hidden="true">
+      <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px;">
+        <div>
+          <div style="font-weight: 700; font-size: 13.5px; display: flex; align-items: center; gap: 6px;">
+            <span data-i18n="web_title">🌐 Fitur Buka di Website (Laptop / Browser Luar)</span>
+            <span id="web-pill" class="pill" style="font-size: 10px;">Checking...</span>
+          </div>
+          <div id="web-info-text" style="font-size: 11px; color: var(--text-muted); margin-top: 2px;" data-i18n="web_info_off">
+            Aktifkan agar dashboard bisa dibuka di browser laptop via Wi-Fi/ADB port 8088
+          </div>
+        </div>
+        <button id="btn-web-toggle" class="btn btn-outline" style="padding: 5px 12px; font-size: 11px; font-weight: 600;" onclick="toggleWebServer()">
+          Ubah Status
+        </button>
+      </div>
+      <div id="web-url-box" style="margin-top: 8px; padding: 6px 10px; background: rgba(0,0,0,0.3); border-radius: 8px; font-family: var(--font-mono); font-size: 11px; display: flex; justify-content: space-between; align-items: center;">
+        <span id="web-url-text" style="color: var(--accent);">http://...:8088</span>
+        <button class="btn btn-outline" style="padding: 2px 8px; font-size: 10px;" onclick="copyWebUrl()" data-i18n="web_copy">Salin URL</button>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">
+        <span data-i18n="card_prof_title">⚡ Pilihan Profil Kernel</span>
+        <span id="lock-status-badge" style="font-size: 11px; font-weight: 600; color: var(--accent);">Dinamis</span>
+      </div>
+
+      <div class="mode-switch-card">
+        <button id="btn-mode-dynamic" class="mode-tab-btn active" onclick="setMode('dynamic')" data-i18n="mode_dyn_btn">
+          🔄 Mode Dinamis (Per-App)
+        </button>
+        <button id="btn-mode-locked" class="mode-tab-btn" onclick="setMode('locked')" data-i18n="mode_lock_btn">
+          🔒 Kunci Manual (Tetap Aktif)
+        </button>
+      </div>
+
+      <div class="profile-cards">
+        <div class="prof-btn" data-prof="gaming" onclick="onProfileClick('gaming')">
+          <span class="icon">🎮</span>
+          <span class="name">Gaming</span>
+          <span class="desc">Max 2.2G</span>
+        </div>
+        <div class="prof-btn" data-prof="performance" onclick="onProfileClick('performance')">
+          <span class="icon">🚀</span>
+          <span class="name">Performance</span>
+          <span class="desc">High Clocks</span>
+        </div>
+        <div class="prof-btn selected" data-prof="balanced" onclick="onProfileClick('balanced')">
+          <span class="icon">⚖️</span>
+          <span class="name">Balanced</span>
+          <span class="desc">Optimal</span>
+        </div>
+        <div class="prof-btn" data-prof="battery" onclick="onProfileClick('battery')">
+          <span class="icon">🔋</span>
+          <span class="name">Battery</span>
+          <span class="desc">Cap 1.4G</span>
+        </div>
+        <div class="prof-btn" data-prof="powersave" onclick="onProfileClick('powersave')">
+          <span class="icon">🛑</span>
+          <span class="name">Powersave</span>
+          <span class="desc">Ekstrem</span>
+        </div>
+      </div>
+
+      <div id="dynamic-mode-controls">
+        <div class="mode-info-box">
+          <span data-i18n="dyn_info">Mode Dinamis: Profil berubah otomatis mengikuti aplikasi yang dibuka.</span>
+          <button class="btn btn-outline" style="padding: 4px 10px; font-size: 11px; flex: 0 0 auto;" onclick="setDefaultProfileFromSelection()">
+            Set <span id="dyn-sel-prof-name">Balanced</span> Jadi Default
+          </button>
+        </div>
+        <div class="override-actions">
+          <button class="btn btn-warn" onclick="lockSelectedProfile()">
+            🔒 Kunci Profil <span id="btn-lock-prof-name">Balanced</span> Secara Permanen
+          </button>
+        </div>
+      </div>
+
+      <div id="locked-mode-controls" style="display: none;">
+        <div class="mode-info-box" style="border-color: rgba(245, 158, 11, 0.3); color: #fde68a;">
+          <span data-i18n="lock_info">🔒 Profil saat ini terkunci secara permanen. Tidak akan kembali ke balanced saat ganti aplikasi.</span>
+        </div>
+        <div class="override-actions">
+          <button class="btn btn-primary" onclick="setMode('dynamic')" data-i18n="lock_unlock_btn">
+            🔄 Buka Kunci (Kembali ke Mode Dinamis Per-App)
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">
+        <span data-i18n="card_cpu_title">🔥 Frekuensi CPU Clusters</span>
+        <span id="telemetry-refresh-indicator" style="font-size: 11px; color: var(--accent);">● Live (1s)</span>
+      </div>
+      <div class="grid-2">
+
+        <div class="gauge-card">
+          <div class="gauge-header">
+            <span>6x Little (A55)</span>
+            <span id="l-gov" class="pill" style="font-size: 10px; padding: 2px 6px;">schedutil</span>
+          </div>
+          <div id="l-cur-freq" class="gauge-val">800 MHz</div>
+          <div class="gauge-bar-bg">
+            <div id="l-bar" class="gauge-bar-fill accent" style="transform: scaleX(0.4);"></div>
+          </div>
+          <div class="gauge-sub">
+            <span>Min: <span id="l-min-freq">500</span>M</span>
+            <span>Max: <span id="l-max-freq">2000</span>M</span>
+          </div>
+        </div>
+
+        <div class="gauge-card">
+          <div class="gauge-header">
+            <span>2x Big (A76)</span>
+            <span id="b-gov" class="pill" style="font-size: 10px; padding: 2px 6px;">schedutil</span>
+          </div>
+          <div id="b-cur-freq" class="gauge-val">900 MHz</div>
+          <div class="gauge-bar-bg">
+            <div id="b-bar" class="gauge-bar-fill purple" style="transform: scaleX(0.41);"></div>
+          </div>
+          <div class="gauge-sub">
+            <span>Min: <span id="b-min-freq">725</span>M</span>
+            <span>Max: <span id="b-max-freq">2200</span>M</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card" style="display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 12px 14px;">
+      <div>
+        <div style="font-weight: 700; font-size: 13px; display: flex; align-items: center; gap: 6px;">
+          <span data-i18n="trans_sched_title">⚡ Transsion Scheduler (trans_sched)</span>
+          <span id="trans-sched-pill" class="pill active">0x7FF</span>
+        </div>
+        <div style="font-size: 11px; color: var(--text-muted); margin-top: 2px;" data-i18n="trans_sched_desc">
+          Akselerasi UX mutex & pipeline frame in-kernel khusus Infinix/Transsion
+        </div>
+      </div>
+      <div>
+        <button id="btn-toggle-trans-sched" class="btn btn-outline" style="border-color: var(--accent); color: var(--accent); padding: 6px 14px; font-size: 11.5px; flex: 0 0 auto;" onclick="toggleTransSched()">
+          Aktif
+        </button>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">
+        <span data-i18n="card_gpu_title">🎮 Mali GPU & Kernel Scheduler</span>
+      </div>
+      <div class="grid-4" style="grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));">
+        <div class="metric-badge">
+          <div class="m-label">GPU Range</div>
+          <div id="gpu-range" class="m-val">390 - 1100 MHz</div>
+        </div>
+        <div class="metric-badge">
+          <div class="m-label">GED Boost</div>
+          <div id="gpu-boost" class="m-val" style="color: var(--accent);">OFF</div>
+        </div>
+        <div class="metric-badge">
+          <div class="m-label">GPU Boost Freq</div>
+          <div id="gpu-boost-freq" class="m-val" style="color: #60a5fa;">990 MHz</div>
+        </div>
+        <div class="metric-badge">
+          <div class="m-label">Schedutil Rate</div>
+          <div id="sched-rate" class="m-val" style="color: #10b981;">1000 µs</div>
+        </div>
+        <div class="metric-badge">
+          <div class="m-label">BORE Penalty</div>
+          <div id="bore-scale" class="m-val">1280</div>
+        </div>
+        <div class="metric-badge">
+          <div class="m-label">UCLAMP Min/Max</div>
+          <div id="uclamp-val" class="m-val">10% - 100%</div>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <section id="view-perapp" class="view-content">
+    <div class="card">
+      <div class="card-title">
+        <span>📱 Pengaturan Kernel Per-Aplikasi</span>
+        <div class="title-actions">
+          <button id="btn-add-rule" class="btn-icon-sq btn-icon-add" title="Tambah aturan aplikasi" aria-label="Tambah aturan aplikasi" onclick="openAddRuleModal()">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>
+          </button>
+          <button id="btn-trash-mode" class="btn-icon-sq btn-icon-trash" title="Hapus aturan" aria-label="Mode hapus" onclick="toggleDeleteMode()">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
+          </button>
+        </div>
+      </div>
+
+      <div id="delete-toolbar" class="delete-toolbar" style="display:none;">
+        <button class="btn btn-outline" style="padding: 5px 12px; font-size: 12px;" onclick="selectAllRules()">☑ All</button>
+        <button id="btn-delete-selected" class="btn btn-danger-solid" style="padding: 5px 12px; font-size: 12px;" onclick="deleteSelectedRules()" disabled>🗑 Delete (0)</button>
+        <button class="btn btn-outline" style="padding: 5px 12px; font-size: 12px; margin-left: auto;" onclick="toggleDeleteMode(false)">✕</button>
+      </div>
+      <div style="font-size: 11.5px; color: var(--text-muted); margin-bottom: 12px;">
+        Konfigurasi kernel (CPU, GPU, Scheduler & UCLAMP) otomatis aktif seketika saat aplikasi berjalan di layar depan.
+      </div>
+
+      <div class="segmented-control" style="margin-bottom: 10px;">
+        <button id="rules-seg-user" class="segmented-btn active" onclick="setRulesTab('user')">📱 Pengguna (0)</button>
+        <button id="rules-seg-system" class="segmented-btn" onclick="setRulesTab('system')">⚙️ Sistem (0)</button>
+      </div>
+
+      <div class="rules-header-bar">
+        <input id="rule-search" class="search-input" type="search" placeholder="Cari nama package..." oninput="filterRules()">
+        <div style="display: flex; align-items: center; gap: 6px;">
+          <span style="font-size: 11px; color: var(--text-muted);">Default:</span>
+          <select id="select-default-prof" style="width: auto; padding: 6px 10px;" onchange="changeDefaultProfile()">
+            <option value="gaming">gaming</option>
+            <option value="performance">performance</option>
+            <option value="balanced" selected>balanced</option>
+            <option value="battery">battery</option>
+            <option value="powersave">powersave</option>
+          </select>
+        </div>
+      </div>
+
+      <div id="rules-list">
+        <div style="text-align: center; color: var(--text-muted); padding: 20px;">Memuat aturan...</div>
+      </div>
+    </div>
+  </section>
+
+  <section id="view-tuner" class="view-content">
+    <div class="card">
+      <div class="card-title">
+        <span>⚙️ Profil Parameter Tuner</span>
+        <button class="btn btn-outline" style="padding: 5px 12px; flex: 0 0 auto;" onclick="loadProfilesConf()">Muat Ulang</button>
+      </div>
+      <div style="font-size: 11.5px; color: var(--text-muted); margin-bottom: 14px;">
+        Ubah parameter kernel per-profil langsung ke <code style="color: var(--accent);">profiles.conf</code>.
+      </div>
+
+      <div class="form-group">
+        <label>Pilih Profil untuk Diedit</label>
+        <select id="tune-prof-select" onchange="renderProfileForm()">
+          <option value="gaming">gaming (Gaming Mode)</option>
+          <option value="performance">performance (High Throughput)</option>
+          <option value="balanced">balanced (Optimal Daily)</option>
+          <option value="battery">battery (Battery Saver)</option>
+          <option value="powersave">powersave (Extreme Powersave)</option>
+          <option value="sleep">sleep (Screen-Off Idle)</option>
+        </select>
+      </div>
+
+      <div id="tune-form-container">
+
+      </div>
+
+      <div style="margin-top: 14px; display: flex; gap: 8px; flex-wrap: wrap;">
+        <button class="btn btn-primary" onclick="saveTunedProfile()">💾 Simpan Konfigurasi</button>
+        <button class="btn btn-outline" onclick="toggleRawEditor()">📝 Editor Mentah</button>
+      </div>
+
+      <div id="raw-editor-box" style="display: none; margin-top: 14px;">
+        <textarea id="raw-conf-text" rows="12" style="font-family: var(--font-mono); font-size: 11.5px;"></textarea>
+        <button class="btn btn-primary" style="margin-top: 8px;" onclick="saveRawProfilesConf()">Simpan Teks Mentah</button>
+      </div>
+    </div>
+  </section>
+
+  <section id="view-logs" class="view-content">
+
+    <div class="card" style="margin-bottom: 12px; padding: 12px 14px; border-left: 3px solid var(--accent); display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px;">
+      <div>
+        <div style="font-size: 13px; font-weight: 600; display: flex; align-items: center; gap: 6px;">
+          <span>🌐 Fitur Akses Website (Port 8088)</span>
+        </div>
+        <div id="log-web-status-desc" style="font-size: 11px; color: var(--text-muted); margin-top: 2px;">
+          Status web server untuk dibuka di browser laptop/perangkat lain.
+        </div>
+      </div>
+      <button id="btn-log-web-toggle" class="btn btn-outline" style="padding: 5px 12px; font-size: 11px;" onclick="toggleWebServer()">
+        Toggle
+      </button>
+    </div>
+
+    <div class="card">
+      <div class="card-title">
+        <span>📜 Riwayat Pergantian Profil</span>
+        <div style="display: flex; gap: 6px;">
+          <button class="btn btn-outline" style="padding: 4px 8px; font-size: 11px;" onclick="refreshLogs()">Refresh</button>
+          <button class="btn btn-danger" style="padding: 4px 8px; font-size: 11px;" onclick="clearHistoryLog()">Hapus Log</button>
+        </div>
+      </div>
+      <div id="log-box" class="log-box">Memuat riwayat...</div>
+    </div>
+  </section>
+
+  <section id="view-terminal" class="view-content">
+    <div class="card">
+      <div class="card-title">
+        <span>💻 Terminal CLI (tkm)</span>
+      </div>
+      <div style="display: flex; gap: 6px; margin-bottom: 10px; flex-wrap: wrap;">
+        <button class="btn btn-outline" style="padding: 4px 8px; font-size: 11px;" onclick="runCli('tkm status')">tkm status</button>
+        <button class="btn btn-outline" style="padding: 4px 8px; font-size: 11px;" onclick="runCli('tkm restart')">Restart Daemon</button>
+        <button class="btn btn-outline" style="padding: 4px 8px; font-size: 11px;" onclick="runCli('tkm reload')">Reload Config</button>
+        <button class="btn btn-outline" style="padding: 4px 8px; font-size: 11px;" onclick="runCli('tkm unforce')">tkm unforce</button>
+        <button class="btn btn-outline" style="padding: 4px 8px; font-size: 11px; color: var(--accent);" onclick="runCli('tkm switchlog 200')">📜 Switch Log</button>
+      </div>
+      <div style="display: flex; gap: 8px; margin-bottom: 12px;">
+        <input id="cli-input" class="search-input" style="font-family: var(--font-mono);" type="text" placeholder="Ketik perintah (contoh: tkm status)..." onkeydown="if(event.key==='Enter')executeCustomCli()">
+        <button class="btn btn-primary" style="padding: 8px 14px; flex: 0 0 auto;" onclick="executeCustomCli()">Kirim</button>
+      </div>
+      <pre id="cli-output" class="log-box">Ketik perintah di atas atau klik tombol cepat.</pre>
+    </div>
+  </section>
+</div>
+
+  <dialog id="modal-app-config" style="max-height: 90vh; overflow-y: auto;">
+    <div id="modal-app-config-content"></div>
+  </dialog>
+
+  <template id="tmpl-app-config-modal">
+  <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 12px;">
+    <div>
+      <h3 style="font-size: 16px; color: var(--accent); display: flex; align-items: center; gap: 6px;">
+        <span id="cfg-modal-title">📱 Konfigurasi Kernel Per-Aplikasi</span>
+      </h3>
+      <div id="tune-app-pkg" style="font-family: var(--font-mono); font-size: 12px; color: var(--text-muted); word-break: break-all; margin-top: 2px;">
+        Pilih atau ketik package aplikasi
+      </div>
+    </div>
+    <button class="btn-icon-del" style="color: var(--text-muted); font-size: 18px;" onclick="closeAppConfigModal()">✕</button>
+  </div>
+
+  <div id="cfg-app-select-box" style="margin-bottom: 12px;">
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+      <label style="font-size: 11px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px; font-weight: 700;">Centang Aplikasi Target:</label>
+      <div style="display: flex; gap: 6px;">
+        <button class="btn btn-outline" style="padding: 2px 8px; font-size: 10px;" type="button" onclick="selectAllFilteredApps()">Pilih Semua</button>
+        <button class="btn btn-outline" style="padding: 2px 8px; font-size: 10px;" type="button" onclick="clearAppSelection()">Batal</button>
+      </div>
+    </div>
+
+    <div class="segmented-control" style="margin-bottom: 8px;">
+      <button id="seg-all" class="segmented-btn" onclick="setAppFilterType('all')">Semua</button>
+      <button id="seg-user" class="segmented-btn active" onclick="setAppFilterType('user')">Pengguna (User)</button>
+      <button id="seg-system" class="segmented-btn" onclick="setAppFilterType('system')">Sistem (System)</button>
+    </div>
+
+    <input id="modal-search-app" type="text" placeholder="Cari nama aplikasi (contoh: pubg, youtube, camera)..." oninput="filterAppPickerList()" style="margin-bottom: 6px;">
+
+    <div id="batch-action-bar" style="display: none; background: rgba(0,210,180,0.08); border: 1px solid var(--accent); border-radius: 10px; padding: 10px; margin-bottom: 8px;">
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+        <span style="font-size: 11.5px; font-weight: 700; color: var(--accent);" id="batch-selected-count">Terpilih: 0 aplikasi</span>
+        <span style="font-size: 10px; color: var(--text-muted);">Simpan langsung dengan profil:</span>
+      </div>
+      <div style="display: flex; gap: 6px; flex-wrap: wrap;">
+        <select id="batch-prof-select" style="flex: 1; min-width: 110px; padding: 6px 10px; font-size: 11.5px;">
+          <option value="gaming">🎮 Gaming</option>
+          <option value="performance">🚀 Performance</option>
+          <option value="balanced" selected>⚖️ Balanced</option>
+          <option value="battery">🔋 Battery</option>
+          <option value="powersave">🛑 Powersave</option>
+        </select>
+        <button class="btn btn-primary" style="padding: 6px 14px; font-size: 11.5px; flex: 0 0 auto;" type="button" onclick="applyBatchSelectedApps()">
+          ➕ Simpan ke Aturan
+        </button>
+      </div>
+    </div>
+
+    <div id="modal-app-picker" class="app-picker-list" style="max-height: 200px; overflow-y: auto;">
+      <div style="padding: 10px; color: var(--text-muted); text-align: center;">Memuat daftar aplikasi...</div>
+    </div>
+  </div>
+
+  <div id="cfg-config-section">
+  <div class="form-group" style="margin-bottom: 12px;">
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
+      <label style="font-weight: 700; font-size: 11.5px; text-transform: uppercase;">Package Name Target:</label>
+      <span style="font-size: 10px; color: var(--text-muted);">Otomatis terisi saat centang 1 aplikasi</span>
+    </div>
+    <input id="tune-app-target-pkg" type="text" placeholder="com.contoh.aplikasi" style="font-family: var(--font-mono); font-size: 12px;">
+  </div>
+
+  <div style="margin-bottom: 14px; background: rgba(0,210,180,0.05); border: 1px dashed rgba(0,210,180,0.25); border-radius: 10px; padding: 10px;">
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+      <span style="font-size: 11px; font-weight: 700; color: var(--accent);">⚡ Template Cepat (Isi Otomatis):</span>
+      <span style="font-size: 10px; color: var(--text-muted);">Bebas ubah toggle di bawah</span>
+    </div>
+    <div style="display: flex; gap: 6px; flex-wrap: wrap;">
+      <button class="btn btn-outline" style="padding: 4px 8px; font-size: 10.5px; border-color: var(--gaming);" type="button" onclick="applyQuickTemplate('gaming')">🎮 Gaming Max</button>
+      <button class="btn btn-outline" style="padding: 4px 8px; font-size: 10.5px; border-color: var(--perf);" type="button" onclick="applyQuickTemplate('performance')">🚀 Performa</button>
+      <button class="btn btn-outline" style="padding: 4px 8px; font-size: 10.5px; border-color: var(--balanced);" type="button" onclick="applyQuickTemplate('balanced')">⚖️ Balanced</button>
+      <button class="btn btn-outline" style="padding: 4px 8px; font-size: 10.5px; border-color: var(--battery);" type="button" onclick="applyQuickTemplate('battery')">🔋 Hemat Daya</button>
+      <button class="btn btn-outline" style="padding: 4px 8px; font-size: 10.5px; border-color: var(--powersave);" type="button" onclick="applyQuickTemplate('powersave')">🛑 Powersave</button>
+    </div>
+  </div>
+
+  <div class="setting-section">
+    <div class="setting-section-header" style="color: #60a5fa;">
+      <span>🔹 CPU Little Cluster (6x Core Cortex-A55)</span>
+      <span style="font-size: 10px; color: var(--text-muted);">Core Efisiensi</span>
+    </div>
+    <div class="setting-info">
+      Governor dan batas frekuensi 6 core efisiensi (policy0) untuk menghemat daya saat task ringan.
+    </div>
+    <div class="grid-2" style="margin-top: 8px;">
+      <div class="form-group" style="margin-bottom: 8px;">
+        <label>Governor Little</label>
+        <select id="app-cpu-l-gov">
+          <option value="schedutil">schedutil (Adaptif Responsif)</option>
+          <option value="performance">performance (Kunci Frekuensi Penuh)</option>
+          <option value="powersave">powersave (Hemat Daya Minimum)</option>
+          <option value="sugov_ext">sugov_ext (MediaTek Extension)</option>
+          <option value="conservative">conservative (Kenaikan Bertahap)</option>
+        </select>
+      </div>
+      <div class="form-group" style="margin-bottom: 8px;">
+        <label>Min Freq Little</label>
+        <select id="app-cpu-l-min">
+          <option value="500000">500 MHz (Idle Hemat)</option>
+          <option value="800000">800 MHz</option>
+          <option value="1000000">1000 MHz (1.0 GHz)</option>
+          <option value="1200000">1200 MHz</option>
+          <option value="1400000">1400 MHz (Gaming Base)</option>
+          <option value="1600000">1600 MHz</option>
+          <option value="1800000">1800 MHz</option>
+          <option value="2000000">2000 MHz (2.0 GHz Max)</option>
+        </select>
+      </div>
+    </div>
+    <div class="form-group" style="margin-bottom: 0;">
+      <label>Max Freq Little (Batas Atas)</label>
+      <select id="app-cpu-l-max">
+        <option value="2000000">2000 MHz (2.0 GHz - Performa Maksimum)</option>
+        <option value="1900000">1900 MHz (1.9 GHz)</option>
+        <option value="1800000">1800 MHz (1.8 GHz)</option>
+        <option value="1600000">1600 MHz (1.6 GHz)</option>
+        <option value="1400000">1400 MHz (1.4 GHz)</option>
+        <option value="1200000">1200 MHz (1.2 GHz)</option>
+        <option value="1000000">1000 MHz (1.0 GHz - Hemat)</option>
+        <option value="800000">800 MHz (Sangat Hemat)</option>
+      </select>
+    </div>
+  </div>
+
+  <div class="setting-section">
+    <div class="setting-section-header" style="color: #c084fc;">
+      <span>🔥 CPU Big Cluster (2x Core Cortex-A76)</span>
+      <span style="font-size: 10px; color: var(--text-muted);">Core Performa Tinggi</span>
+    </div>
+    <div class="setting-info">
+      Core utama untuk komputasi berat, gaming framerate, dan rendering interaktif (policy6).
+    </div>
+    <div class="grid-2" style="margin-top: 8px;">
+      <div class="form-group" style="margin-bottom: 8px;">
+        <label>Governor Big</label>
+        <select id="app-cpu-b-gov">
+          <option value="schedutil">schedutil (Adaptif Responsif)</option>
+          <option value="performance">performance (Kunci Frekuensi Penuh)</option>
+          <option value="powersave">powersave (Hemat Daya)</option>
+          <option value="sugov_ext">sugov_ext (MediaTek Extension)</option>
+          <option value="conservative">conservative (Kenaikan Bertahap)</option>
+        </select>
+      </div>
+      <div class="form-group" style="margin-bottom: 8px;">
+        <label>Min Freq Big</label>
+        <select id="app-cpu-b-min">
+          <option value="725000">725 MHz (Idle Min Helio G99)</option>
+          <option value="1000000">1000 MHz (1.0 GHz)</option>
+          <option value="1200000">1200 MHz</option>
+          <option value="1500000">1500 MHz (High Base)</option>
+          <option value="1800000">1800 MHz (Gaming Base)</option>
+          <option value="2000000">2000 MHz</option>
+          <option value="2200000">2200 MHz (2.2 GHz Peak Locked)</option>
+        </select>
+      </div>
+    </div>
+    <div class="form-group" style="margin-bottom: 0;">
+      <label>Max Freq Big (Batas Atas)</label>
+      <select id="app-cpu-b-max">
+        <option value="2200000">2200 MHz (2.2 GHz - Peak Helio G99)</option>
+        <option value="2100000">2100 MHz (2.1 GHz)</option>
+        <option value="2000000">2000 MHz (2.0 GHz)</option>
+        <option value="1800000">1800 MHz (1.8 GHz)</option>
+        <option value="1600000">1600 MHz (1.6 GHz)</option>
+        <option value="1400000">1400 MHz (1.4 GHz - Hemat)</option>
+        <option value="1200000">1200 MHz (1.2 GHz)</option>
+        <option value="1000000">1000 MHz (1.0 GHz - Cap Baterai)</option>
+      </select>
+    </div>
+  </div>
+
+  <div class="setting-section">
+    <div class="setting-section-header" style="color: var(--accent);">
+      <span>🎮 GPU Mali-G57 MC2 & MediaTek GED</span>
+      <span style="font-size: 10px; color: var(--text-muted);">Grafis & Gaming</span>
+    </div>
+    <div class="setting-info">
+      Pengaturan clock frekuensi grafis dan akselerasi driver GED (GPU Extension Device).
+    </div>
+    <div class="grid-2" style="margin-top: 8px;">
+      <div class="form-group" style="margin-bottom: 8px;">
+        <label>GPU Min Frequency</label>
+        <select id="app-gpu-min">
+          <option value="390000">390 MHz (Idle Minimum)</option>
+          <option value="545000">545 MHz</option>
+          <option value="648000">648 MHz</option>
+          <option value="801000">801 MHz (Gaming Floor)</option>
+          <option value="948000">948 MHz</option>
+          <option value="1100000">1100 MHz (Locked Peak)</option>
+        </select>
+      </div>
+      <div class="form-group" style="margin-bottom: 8px;">
+        <label>GPU Max Frequency</label>
+        <select id="app-gpu-max">
+          <option value="1100000">1100 MHz (1.1 GHz - Max Peak)</option>
+          <option value="1003000">1003 MHz (1.0 GHz)</option>
+          <option value="880000">880 MHz (Optimal Harian)</option>
+          <option value="756000">756 MHz</option>
+          <option value="648000">648 MHz</option>
+          <option value="545000">545 MHz</option>
+          <option value="390000">390 MHz (Cap Hemat Baterai)</option>
+        </select>
+      </div>
+    </div>
+
+    <div style="background: rgba(0,0,0,0.2); border-radius: 8px; padding: 10px; margin-top: 6px; margin-bottom: 8px;">
+      <label class="switch-label">
+        <div>
+          <div style="font-weight: 700; font-size: 12px; color: var(--text);">🚀 GED Smart Boost</div>
+          <div class="setting-info">Booster GPU otomatis saat mendeteksi beban render frame berat atau event sentuhan layar.</div>
+        </div>
+        <div class="switch">
+          <input type="checkbox" id="app-gpu-boost-toggle" onchange="syncToggleVal(this, 'app-gpu-boost')">
+          <span class="slider"></span>
+        </div>
+      </label>
+      <input type="hidden" id="app-gpu-boost" value="0">
+    </div>
+
+    <div class="grid-2">
+      <div class="form-group" style="margin-bottom: 8px;">
+        <label>GPU Boost Target Freq</label>
+        <select id="app-gpu-boost-freq">
+          <option value="1100000">1100 MHz (Max Boost Peak)</option>
+          <option value="990000">990 MHz (High Boost)</option>
+          <option value="801000">801 MHz (Medium Boost)</option>
+          <option value="648000">648 MHz (Balanced)</option>
+          <option value="390000">390 MHz (Eco / Min)</option>
+        </select>
+      </div>
+      <div class="form-group" style="margin-bottom: 8px;">
+        <label>GPU Lock OPP Index</label>
+        <select id="app-gpu-lock-opp">
+          <option value="-1">-1 (Dinamis / Tidak Dikunci)</option>
+          <option value="0">OPP 0 (Kunci Peak 1100 MHz)</option>
+          <option value="10">OPP 10 (High Clock)</option>
+          <option value="20">OPP 20 (Mid Clock)</option>
+          <option value="30">OPP 30 (Balanced Clock)</option>
+          <option value="44">OPP 44 (Kunci Minimum 390 MHz)</option>
+        </select>
+      </div>
+    </div>
+  </div>
+
+  <div class="setting-section">
+    <div class="setting-section-header" style="color: #10b981;">
+      <span>⚡ Transsion Scheduler (trans_sched)</span>
+      <span class="pill active" style="font-size: 9px; padding: 1px 6px;">Transsion Exclusive</span>
+    </div>
+    <div class="setting-info">
+      Akselerasi in-kernel khusus Infinix, Tecno & Itel untuk memprioritaskan UI Mutex (0x7FF), pipeline compositing, dan mencegah frame drop saat aplikasi berjalan.
+    </div>
+
+    <div style="background: rgba(0,0,0,0.2); border-radius: 8px; padding: 10px; margin-top: 8px;">
+      <label class="switch-label">
+        <div>
+          <div style="font-weight: 700; font-size: 12px; color: var(--text);">Transsion trans_sched Boost</div>
+          <div class="setting-info">Aktifkan 0x7FF UX Priority untuk responsivitas animasi dan kelancaran grafis Transsion.</div>
+        </div>
+        <div class="switch">
+          <input type="checkbox" id="app-trans-sched-toggle" onchange="syncToggleVal(this, 'app-trans-sched')">
+          <span class="slider"></span>
+        </div>
+      </label>
+      <input type="hidden" id="app-trans-sched" value="1">
+    </div>
+
+    <div class="form-group" style="margin-top: 8px; margin-bottom: 0;">
+      <label>Transsion Lock Tuner (/proc/trans_scheduler/lock_tuner)</label>
+      <select id="app-trans-lock-tuner">
+        <option value="7">7 (0x07 - Mutex + RTMutex + RWSEM Boost Maksimal)</option>
+        <option value="3">3 (0x03 - Mutex + RTMutex Boost)</option>
+        <option value="1">1 (0x01 - Mutex Only Boost)</option>
+        <option value="0">0 (0x00 - Nonaktif / Lock Tuner Off)</option>
+      </select>
+    </div>
+  </div>
+
+  <div class="setting-section">
+    <div class="setting-section-header" style="color: #f59e0b;">
+      <span>👆 Energy Aware Scheduling (UCLAMP) & Latensi</span>
+      <span style="font-size: 10px; color: var(--text-muted);">Top-App Cgroup</span>
+    </div>
+    <div class="setting-info">
+      Mengatur alokasi kapasitas CPU minimum/maksimum serta kepekaan latensi sentuhan untuk proses aplikasi depan.
+    </div>
+
+    <div style="background: rgba(0,0,0,0.2); border-radius: 8px; padding: 10px; margin-top: 8px; margin-bottom: 8px;">
+      <label class="switch-label">
+        <div>
+          <div style="font-weight: 700; font-size: 12px; color: var(--text);">UCLAMP Latency Sensitive</div>
+          <div class="setting-info">Prioritas komputasi seketika saat ada sentuhan layar. Menghilangkan delay sentuhan.</div>
+        </div>
+        <div class="switch">
+          <input type="checkbox" id="app-uclamp-lat-toggle" onchange="syncToggleVal(this, 'app-uclamp-lat')">
+          <span class="slider"></span>
+        </div>
+      </label>
+      <input type="hidden" id="app-uclamp-lat" value="0">
+    </div>
+
+    <div class="grid-2">
+      <div class="form-group" style="margin-bottom: 0;">
+        <label>UCLAMP Min (% Utilisasi Dasar)</label>
+        <select id="app-uclamp-min">
+          <option value="0.00">0% (Hemat Daya)</option>
+          <option value="10.00">10% (Balanced Default)</option>
+          <option value="20.00">20% (Smooth Harian)</option>
+          <option value="40.00">40% (High Performance)</option>
+          <option value="60.00">60% (Gaming Agresif)</option>
+          <option value="80.00">80% (Extreme Latency Free)</option>
+        </select>
+      </div>
+      <div class="form-group" style="margin-bottom: 0;">
+        <label>UCLAMP Max (% Batas Utilisasi)</label>
+        <select id="app-uclamp-max">
+          <option value="100.00">100% (Tanpa Batas - Maksimal)</option>
+          <option value="80.00">80%</option>
+          <option value="60.00">60% (Capping Hemat Baterai)</option>
+          <option value="40.00">40% (Batas Ketat)</option>
+          <option value="20.00">20% (Powersave Ekstrem)</option>
+        </select>
+      </div>
+    </div>
+  </div>
+
+  <div class="setting-section">
+    <div class="setting-section-header" style="color: #ec4899;">
+      <span>🌀 BORE Scheduler & Schedutil Rate Limit</span>
+      <span style="font-size: 10px; color: var(--text-muted);">Kernel 6.12 Scheduler</span>
+    </div>
+    <div class="setting-info">
+      BORE menjaga kehalusan frame dengan mencegah proses background mengganggu interaktivitas layar.
+    </div>
+
+    <div class="grid-2" style="margin-top: 8px;">
+      <div class="form-group" style="margin-bottom: 0;">
+        <label>BORE Burst Penalty Scale</label>
+        <select id="app-bore-scale">
+          <option value="800">800 (Ultra Smooth Gaming - E-Sports)</option>
+          <option value="1000">1000 (High Sustained Throughput)</option>
+          <option value="1280">1280 (Balanced Default Linux)</option>
+          <option value="1600">1600 (Battery Saver)</option>
+          <option value="2000">2000 (Powersave Maksimum)</option>
+        </select>
+      </div>
+      <div class="form-group" style="margin-bottom: 0;">
+        <label>Schedutil Rate Limit (Jeda Transisi)</label>
+        <select id="app-sched-rate">
+          <option value="0">0 µs (Instan Jump Tanpa Jeda)</option>
+          <option value="500">500 µs (Gaming Cepat)</option>
+          <option value="1000">1000 µs (Standard Responsif)</option>
+          <option value="3000">3000 µs (Hemat Daya / Tenang)</option>
+          <option value="5000">5000 µs (Powersave)</option>
+        </select>
+      </div>
+    </div>
+  </div>
+
+  <div class="setting-section">
+    <div class="setting-section-header" style="color: #ef4444;">
+      <span>🎮 In-Kernel Game Mode (/proc/game_state)</span>
+      <span style="font-size: 10px; color: var(--text-muted);">Kernel Engine Boost</span>
+    </div>
+    <div class="setting-info">
+      Memicu engine game internal kernel Transsion/MediaTek untuk memprioritaskan frame pipeline, rendering, dan bypass batasan thermal CPU/GPU.
+    </div>
+    <div style="background: rgba(0,0,0,0.2); border-radius: 8px; padding: 10px; margin-top: 8px;">
+      <label class="switch-label">
+        <div>
+          <div style="font-weight: 700; font-size: 12px; color: var(--text);">In-Kernel Game State Boost</div>
+          <div class="setting-info">Tulis Gear position:0 ke /proc/game_mode & aktifkan /proc/game_state saat aplikasi terbuka.</div>
+        </div>
+        <div class="switch">
+          <input type="checkbox" id="app-game-mode-toggle" onchange="syncToggleVal(this, 'app-game-mode')">
+          <span class="slider"></span>
+        </div>
+      </label>
+      <input type="hidden" id="app-game-mode" value="0">
+    </div>
+  </div>
+
+  <div class="setting-section">
+    <div class="setting-section-header" style="color: #06b6d4;">
+      <span>📺 Kunci Refresh Rate Layar</span>
+      <span style="font-size: 10px; color: var(--text-muted);">Display Frame Lock</span>
+    </div>
+    <div class="setting-info">
+      Kunci refresh rate panel display Infinix (60Hz / 90Hz / 120Hz) secara otomatis saat aplikasi berjalan tanpa fluktuasi drop dinamis.
+    </div>
+    <div class="form-group" style="margin-top: 8px; margin-bottom: 0;">
+      <label>Target Refresh Rate Layar</label>
+      <select id="app-refresh-rate">
+        <option value="0">0 (Otomatis / Default Sistem Android)</option>
+        <option value="60">60 Hz (Kunci 60 FPS - Hemat Baterai)</option>
+        <option value="90">90 Hz (Kunci 90 FPS - Mulus Seimbang)</option>
+        <option value="120">120 Hz (Kunci 120 FPS - Ultra Smooth Gaming)</option>
+      </select>
+    </div>
+  </div>
+
+  <div class="setting-section">
+    <div class="setting-section-header" style="color: #eab308;">
+      <span>⚡ EAS & CPU Background Isolation</span>
+      <span style="font-size: 10px; color: var(--text-muted);">Sched Power & Core Allocation</span>
+    </div>
+    <div class="setting-info">
+      Kontrol efisiensi daya Energy Aware Scheduling (EAS) serta alokasi core CPU untuk proses background agar tidak mengganggu performa aplikasi foreground.
+    </div>
+
+    <div style="background: rgba(0,0,0,0.2); border-radius: 8px; padding: 10px; margin-top: 8px; margin-bottom: 8px;">
+      <label class="switch-label">
+        <div>
+          <div style="font-weight: 700; font-size: 12px; color: var(--text);">Energy Aware Scheduling (EAS)</div>
+          <div class="setting-info">Aktif = hemat daya cerdas. Nonaktif (0) = Raw CPU Performance murni tanpa kalkulasi efisiensi energi.</div>
+        </div>
+        <div class="switch">
+          <input type="checkbox" id="app-eas-toggle" onchange="syncToggleVal(this, 'app-eas')">
+          <span class="slider"></span>
+        </div>
+      </label>
+      <input type="hidden" id="app-eas" value="1">
+    </div>
+
+    <div class="form-group" style="margin-bottom: 0;">
+      <label>Background CPUSet Allocation (Core Background)</label>
+      <select id="app-bg-cpus">
+        <option value="0-3">Core 0-3 (Standar - Background memakai 4 core Little)</option>
+        <option value="0-2">Core 0-2 (Dibatasi - Ringankan beban core Little)</option>
+        <option value="0-1">Core 0-1 (Isolasi Ekstrem - Core 2-7 steril hanya untuk game/aplikasi aktif!)</option>
+      </select>
+    </div>
+  </div>
+
+  <div class="setting-section">
+    <div class="setting-section-header" style="color: #f97316;">
+      <span>🛡️ GPU DVFS Anti-Throttle</span>
+      <span style="font-size: 10px; color: var(--text-muted);">MediaTek GED DVFS</span>
+    </div>
+    <div class="setting-info">
+      Dynamic Voltage and Frequency Scaling (DVFS) pada GPU driver MediaTek GED. Mematikan DVFS saat game berat akan mencegah GPU throttling dan fluktuasi drop clock tiba-tiba.
+    </div>
+    <div style="background: rgba(0,0,0,0.2); border-radius: 8px; padding: 10px; margin-top: 8px;">
+      <label class="switch-label">
+        <div>
+          <div style="font-weight: 700; font-size: 12px; color: var(--text);">GPU DVFS Enabled</div>
+          <div class="setting-info">Aktif = Regulasi clock GPU normal. Nonaktif (0) = Anti-throttle, kunci stabilitas clock grafis Mali.</div>
+        </div>
+        <div class="switch">
+          <input type="checkbox" id="app-gpu-dvfs-toggle" onchange="syncToggleVal(this, 'app-gpu-dvfs')">
+          <span class="slider"></span>
+        </div>
+      </label>
+      <input type="hidden" id="app-gpu-dvfs" value="1">
+    </div>
+  </div>
+
+  <div class="setting-section">
+    <div class="setting-section-header" style="color: #3b82f6;">
+      <span>🌐 Jaringan & Manajemen RAM</span>
+      <span style="font-size: 10px; color: var(--text-muted);">TCP Congestion & Swappiness</span>
+    </div>
+    <div class="setting-info">
+      Optimalisasi latensi koneksi internet (TCP) untuk ping game online serta rasio agresivitas swap RAM/ZRAM.
+    </div>
+    <div class="grid-2" style="margin-top: 8px;">
+      <div class="form-group" style="margin-bottom: 0;">
+        <label>TCP Congestion Control</label>
+        <select id="app-tcp-cong">
+          <option value="bbr">BBR (Google BBR - Ping Rendah & Anti Packet Loss)</option>
+          <option value="cubic">CUBIC (Standar Android - Throughput Stabil)</option>
+          <option value="westwood">Westwood (Bagus untuk Jaringan Seluler Labil)</option>
+          <option value="reno">Reno (Legacy Standard)</option>
+        </select>
+      </div>
+      <div class="form-group" style="margin-bottom: 0;">
+        <label>RAM Swappiness (vm.swappiness)</label>
+        <select id="app-swappiness">
+          <option value="30">30 (Gaming Murni - Minim ZRAM, Prioritas RAM Fisik)</option>
+          <option value="60">60 (Performa Responsif)</option>
+          <option value="100">100 (Default Android)</option>
+          <option value="120">120 (Hemat RAM Fisik)</option>
+          <option value="150">150 (Agresif ZRAM - Multitasking Ekstrem)</option>
+        </select>
+      </div>
+    </div>
+  </div>
+
+  </div>
+
+  <div style="display: flex; justify-content: flex-end; gap: 8px; margin-top: 16px; flex-wrap: wrap;">
+    <button id="btn-cancel-config" class="btn btn-outline" style="flex: 0 0 auto;" type="button" onclick="closeAppConfigModal()">Batal</button>
+    <button id="btn-save-config" class="btn btn-primary" style="flex: 0 0 auto;" type="button" onclick="submitAppConfig()">💾 Simpan Konfigurasi</button>
+  </div>
+  </template>
+
+<div id="toast">Notifikasi</div>
+
+<nav class="bottom-nav">
+  <button class="nav-item active" onclick="switchNav('dashboard')">
+    <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"/></svg>
+    <span data-i18n="nav_status">Status</span>
+  </button>
+  <button class="nav-item" onclick="switchNav('perapp')">
+    <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 18h.01M8 21h8a2 2 0 002-2V5a2 2 0 00-2-2H8a2 2 0 00-2 2v14a2 2 0 002 2z"/></svg>
+    <span data-i18n="nav_perapp">Per-App</span>
+  </button>
+  <button class="nav-item" onclick="switchNav('tuner')">
+    <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4"/></svg>
+    <span data-i18n="nav_tuner">Tuner</span>
+  </button>
+  <button class="nav-item" onclick="switchNav('logs')">
+    <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
+    <span data-i18n="nav_logs">Logs</span>
+  </button>
+  <button class="nav-item" onclick="switchNav('terminal')">
+    <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M8 9l3 3-3 3m5 0h3M5 20h14a2 2 0 002-2V6a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
+    <span data-i18n="nav_cli">CLI</span>
+  </button>
+</nav>
+
+<script src="js/app.js"></script>
+</body>
+</html>

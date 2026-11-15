@@ -1,0 +1,874 @@
+#!/system/bin/sh
+
+BASE_DIR="/data/adb/modules/kernel-manager"
+CONFIG_FILE="$BASE_DIR/perapp.conf"
+TYPE_FILE="$BASE_DIR/perapp_type.conf"
+PROFILES_FILE="$BASE_DIR/profiles.conf"
+ENGINE="$BASE_DIR/apply_profile.sh"
+PIDFILE="$BASE_DIR/daemon.pid"
+
+ALL_KEYS="CPU_L_GOV CPU_L_MIN CPU_L_MAX CPU_B_GOV CPU_B_MIN CPU_B_MAX GPU_MIN GPU_MAX GPU_BOOST GPU_BOOST_FREQ GPU_LOCK_OPP UCLAMP_MIN UCLAMP_MAX UCLAMP_LATENCY BORE_SCALE TRANS_SCHED TRANS_LOCK_TUNER SCHED_RATE GAME_MODE REFRESH_RATE EAS_ENABLE BG_CPUS GPU_DVFS TCP_CONG SWAPPINESS"
+
+load_defaults() {
+    L_GOV="schedutil"; L_MIN="500000"; L_MAX="2000000"
+    B_GOV="schedutil"; B_MIN="725000"; B_MAX="2200000"
+    GPU_MIN="390000"; GPU_MAX="1100000"; GPU_BOOST="0"; GPU_BOOST_FREQ="990000"; G_LOCK_OPP="-1"
+    U_MIN="10.00"; U_MAX="100.00"; U_LAT="0"; BORE="1280"
+    TRANS_SCHED="1"; SCHED_RATE="1000"; GAME_MODE="0"; REFRESH_RATE="0"
+    EAS_ENABLE="1"; BG_CPUS="0-3"; GPU_DVFS="1"; TCP_CONG="cubic"; SWAPPINESS="100"; TRANS_LOCK_TUNER="7"
+}
+
+assign_key() {
+    case "$1" in
+        CPU_L_GOV) L_GOV="$2" ;;
+        CPU_L_MIN) L_MIN="$2" ;;
+        CPU_L_MAX) L_MAX="$2" ;;
+        CPU_B_GOV) B_GOV="$2" ;;
+        CPU_B_MIN) B_MIN="$2" ;;
+        CPU_B_MAX) B_MAX="$2" ;;
+        GPU_MIN) GPU_MIN="$2" ;;
+        GPU_MAX) GPU_MAX="$2" ;;
+        GPU_BOOST) GPU_BOOST="$2" ;;
+        GPU_BOOST_FREQ) GPU_BOOST_FREQ="$2" ;;
+        GPU_LOCK_OPP) G_LOCK_OPP="$2" ;;
+        UCLAMP_MIN) U_MIN="$2" ;;
+        UCLAMP_MAX) U_MAX="$2" ;;
+        UCLAMP_LATENCY) U_LAT="$2" ;;
+        BORE_SCALE) BORE="$2" ;;
+        TRANS_SCHED) TRANS_SCHED="$2" ;;
+        SCHED_RATE) SCHED_RATE="$2" ;;
+        GAME_MODE) GAME_MODE="$2" ;;
+        REFRESH_RATE) REFRESH_RATE="$2" ;;
+        EAS_ENABLE) EAS_ENABLE="$2" ;;
+        BG_CPUS) BG_CPUS="$2" ;;
+        GPU_DVFS) GPU_DVFS="$2" ;;
+        TCP_CONG) TCP_CONG="$2" ;;
+        SWAPPINESS) SWAPPINESS="$2" ;;
+        TRANS_LOCK_TUNER) TRANS_LOCK_TUNER="$2" ;;
+        *) return 1 ;;
+    esac
+    return 0
+}
+
+get_key() {
+    case "$1" in
+        CPU_L_GOV) KV="$L_GOV" ;;
+        CPU_L_MIN) KV="$L_MIN" ;;
+        CPU_L_MAX) KV="$L_MAX" ;;
+        CPU_B_GOV) KV="$B_GOV" ;;
+        CPU_B_MIN) KV="$B_MIN" ;;
+        CPU_B_MAX) KV="$B_MAX" ;;
+        GPU_MIN) KV="$GPU_MIN" ;;
+        GPU_MAX) KV="$GPU_MAX" ;;
+        GPU_BOOST) KV="$GPU_BOOST" ;;
+        GPU_BOOST_FREQ) KV="$GPU_BOOST_FREQ" ;;
+        GPU_LOCK_OPP) KV="$G_LOCK_OPP" ;;
+        UCLAMP_MIN) KV="$U_MIN" ;;
+        UCLAMP_MAX) KV="$U_MAX" ;;
+        UCLAMP_LATENCY) KV="$U_LAT" ;;
+        BORE_SCALE) KV="$BORE" ;;
+        TRANS_SCHED) KV="$TRANS_SCHED" ;;
+        TRANS_LOCK_TUNER) KV="$TRANS_LOCK_TUNER" ;;
+        SCHED_RATE) KV="$SCHED_RATE" ;;
+        GAME_MODE) KV="$GAME_MODE" ;;
+        REFRESH_RATE) KV="$REFRESH_RATE" ;;
+        EAS_ENABLE) KV="$EAS_ENABLE" ;;
+        BG_CPUS) KV="$BG_CPUS" ;;
+        GPU_DVFS) KV="$GPU_DVFS" ;;
+        TCP_CONG) KV="$TCP_CONG" ;;
+        SWAPPINESS) KV="$SWAPPINESS" ;;
+        *) KV="" ;;
+    esac
+}
+
+load_section() {
+    local _sec _k _v
+    _sec=""
+    [ -f "$PROFILES_FILE" ] && _sec=$(awk -v tgt="[$1]" '
+        $0 == tgt { flag=1; next }
+        /^\[/ { flag=0 }
+        flag && index($0, "=") > 0 { print }
+    ' "$PROFILES_FILE")
+    while IFS='=' read -r _k _v; do
+        _v="${_v#"${_v%%[![:space:]]*}"}"
+        _v="${_v%"${_v##*[![:space:]]}"}"
+        [ -z "$_v" ] && continue
+        assign_key "$_k" "$_v"
+    done <<EOF_SEC
+$_sec
+EOF_SEC
+}
+
+load_overrides() {
+    local _esc _data _k _v
+    OV_COUNT=0; OV_KEYS=" "; OV_BAD=""
+    [ -f "$CONFIG_FILE" ] || return 0
+    _esc=$(printf '%s' "$1" | sed 's/\./\\./g')
+    _data=$(grep -E "^${_esc}:" "$CONFIG_FILE" | sed "s/^${_esc}://" | tr -d '\r')
+    [ -z "$_data" ] && return 0
+    while IFS='=' read -r _k _v; do
+        _k="${_k#"${_k%%[![:space:]]*}"}"; _k="${_k%"${_k##*[![:space:]]}"}"
+        _v="${_v#"${_v%%[![:space:]]*}"}"; _v="${_v%"${_v##*[![:space:]]}"}"
+        [ -z "$_k" ] && continue
+        [ -z "$_v" ] && continue
+        if assign_key "$_k" "$_v"; then
+            OV_COUNT=$((OV_COUNT + 1))
+            OV_KEYS="${OV_KEYS}${_k} "
+        else
+            OV_BAD="${OV_BAD}${_k} "
+        fi
+    done <<EOF_OVR
+$_data
+EOF_OVR
+}
+
+rule_profile() {
+    local _p=""
+    if [ -f "$CONFIG_FILE" ]; then
+        _p=$(grep -E "^${1}=" "$CONFIG_FILE" | head -n 1 | cut -d '=' -f 2 | tr -d '\r \t')
+        [ -z "$_p" ] && _p=$(grep -E "^DEFAULT=" "$CONFIG_FILE" | head -n 1 | cut -d '=' -f 2 | tr -d '\r \t')
+    fi
+    [ -z "$_p" ] && _p="balanced"
+    echo "$_p"
+}
+
+clear_overrides() {
+    [ -f "$CONFIG_FILE" ] || return 0
+    sed -i -e "/^# \[${1}\] --- detail/d" -e "/^${1}:/d" "$CONFIG_FILE"
+}
+
+expand_pkg() {
+    local _pkg="$1" _prof _blk _key
+    _prof=$(rule_profile "$_pkg")
+    load_defaults
+    load_section "$_prof"
+    load_overrides "$_pkg"
+
+    _blk="$CONFIG_FILE.blk"
+    {
+        echo "# [$_pkg] --- detail override (ubah nilai lalu simpan, otomatis diterapkan) ---"
+        for _key in $ALL_KEYS; do
+            get_key "$_key"
+            echo "${_pkg}:${_key}=${KV}"
+        done
+    } > "$_blk"
+
+    clear_overrides "$_pkg"
+    if grep -q "^${_pkg}=" "$CONFIG_FILE"; then
+        awk -v pre="${_pkg}=" -v bf="$_blk" '
+            { print }
+            !done && index($0, pre) == 1 {
+                while ((getline l < bf) > 0) print l
+                close(bf); done = 1
+            }
+        ' "$CONFIG_FILE" > "$CONFIG_FILE.tmp" && mv "$CONFIG_FILE.tmp" "$CONFIG_FILE"
+    else
+        { echo "${_pkg}=${_prof}"; cat "$_blk"; } >> "$CONFIG_FILE"
+    fi
+    rm -f "$_blk"
+}
+
+case "$1" in
+    status)
+        echo "=================================================="
+        echo "      TRANSSION MT6789 KERNEL MANAGER AUDIT       "
+        echo "=================================================="
+
+        if [ -f "$PIDFILE" ] && kill -0 "$(cat "$PIDFILE" 2>/dev/null)" 2>/dev/null; then
+            echo "[Daemon]       : RUNNING (PID: $(cat "$PIDFILE"))"
+        else
+            echo "[Daemon]       : STOPPED"
+        fi
+
+        if pgrep -f "httpd -p [0-9.]*:8088" >/dev/null 2>&1; then
+            WLAN_IP="127.0.0.1"
+            echo "[Web Server]   : ON (http://${WLAN_IP:-127.0.0.1}:8088)"
+        else
+            echo "[Web Server]   : OFF (Remote website access disabled)"
+        fi
+
+        FG_PKG=$(cat "$BASE_DIR/current_pkg" 2>/dev/null)
+        [ -z "$FG_PKG" ] && FG_PKG="Unknown/None"
+        ACT_PROF=$(cat "$BASE_DIR/current_profile" 2>/dev/null)
+        [ -z "$ACT_PROF" ] && ACT_PROF="Unset"
+
+        if [ -f "$BASE_DIR/manual_override" ]; then
+            echo "[Manual Lock]  : ACTIVE ($(cat "$BASE_DIR/manual_override"))"
+        else
+            echo "[Manual Lock]  : OFF (Dynamic Per-App Mode)"
+        fi
+        echo "[Foreground]   : $FG_PKG"
+        echo "[Active Profile: $ACT_PROF"
+        echo "--------------------------------------------------"
+
+        L_GOV=$(cat /sys/devices/system/cpu/cpufreq/policy0/scaling_governor 2>/dev/null)
+        L_CUR=$(cat /sys/devices/system/cpu/cpufreq/policy0/scaling_cur_freq 2>/dev/null)
+        L_MIN=$(cat /sys/devices/system/cpu/cpufreq/policy0/scaling_min_freq 2>/dev/null)
+        L_MAX=$(cat /sys/devices/system/cpu/cpufreq/policy0/scaling_max_freq 2>/dev/null)
+        echo "[CPU Little]   : Gov=$L_GOV | Cur=$((L_CUR/1000))MHz (Min=$((L_MIN/1000))M / Max=$((L_MAX/1000))M)"
+
+        B_GOV=$(cat /sys/devices/system/cpu/cpufreq/policy6/scaling_governor 2>/dev/null)
+        B_CUR=$(cat /sys/devices/system/cpu/cpufreq/policy6/scaling_cur_freq 2>/dev/null)
+        B_MIN=$(cat /sys/devices/system/cpu/cpufreq/policy6/scaling_min_freq 2>/dev/null)
+        B_MAX=$(cat /sys/devices/system/cpu/cpufreq/policy6/scaling_max_freq 2>/dev/null)
+        echo "[CPU Big]      : Gov=$B_GOV | Cur=$((B_CUR/1000))MHz (Min=$((B_MIN/1000))M / Max=$((B_MAX/1000))M)"
+
+        G_MIN=$(cat /sys/module/ged/parameters/gpu_bottom_freq 2>/dev/null)
+        G_MAX=$(cat /sys/module/ged/parameters/gpu_cust_upbound_freq 2>/dev/null)
+        G_BOOST=$(cat /sys/module/ged/parameters/ged_boost_enable 2>/dev/null)
+        G_BOOST_FREQ=$(cat /sys/module/ged/parameters/gpu_cust_boost_freq 2>/dev/null)
+        G_OPP=$(cat /proc/gpufreqv2/fix_target_opp_index 2>/dev/null)
+        echo "[Mali GPU]     : Bound=${G_MIN}k-${G_MAX}k | Boost=$G_BOOST (Cust=${G_BOOST_FREQ}k) | $G_OPP"
+
+        U_MIN=$(cat /dev/cpuctl/top-app/cpu.uclamp.min 2>/dev/null)
+        U_MAX=$(cat /dev/cpuctl/top-app/cpu.uclamp.max 2>/dev/null)
+        U_LAT=$(cat /dev/cpuctl/top-app/cpu.uclamp.latency_sensitive 2>/dev/null)
+        BORE_SCALE=$(sysctl -n kernel.sched_burst_penalty_scale 2>/dev/null)
+        SCHED_RATE=$(cat /sys/devices/system/cpu/cpufreq/policy0/schedutil/rate_limit_us 2>/dev/null)
+        TS_RAW=$(cat /proc/trans_scheduler/enable 2>/dev/null)
+        TS_LT=$(cat /proc/trans_scheduler/lock_tuner 2>/dev/null)
+        echo "[UCLAMP]       : Min=$U_MIN | Max=$U_MAX | LatencyBoost=$U_LAT"
+        echo "[BORE Sched]   : PenaltyScale=$BORE_SCALE | SchedutilRate=${SCHED_RATE}us"
+        echo "[Trans Sched]  : State=$TS_RAW | LockTuner=$TS_LT"
+        echo "=================================================="
+        ;;
+
+    json)
+        D_RUN="false"
+        D_PID=""
+        if [ -f "$PIDFILE" ] && kill -0 "$(cat "$PIDFILE" 2>/dev/null)" 2>/dev/null; then
+            D_RUN="true"
+            D_PID="$(cat "$PIDFILE")"
+        fi
+
+        FG_PKG=$(cat "$BASE_DIR/current_pkg" 2>/dev/null | tr -d '\r\n')
+        [ -z "$FG_PKG" ] && FG_PKG="Unknown"
+        ACT_PROF=$(cat "$BASE_DIR/current_profile" 2>/dev/null | tr -d '\r\n')
+        [ -z "$ACT_PROF" ] && ACT_PROF="Unset"
+
+        MAN_LOCK=""
+        if [ -f "$BASE_DIR/manual_override" ]; then
+            MAN_LOCK="$(cat "$BASE_DIR/manual_override" 2>/dev/null | tr -d '\r\n\t ')"
+        fi
+
+        L_GOV=$(cat /sys/devices/system/cpu/cpufreq/policy0/scaling_governor 2>/dev/null | tr -d '\r\n')
+        L_CUR=$(cat /sys/devices/system/cpu/cpufreq/policy0/scaling_cur_freq 2>/dev/null | tr -d '\r\n')
+        L_MIN=$(cat /sys/devices/system/cpu/cpufreq/policy0/scaling_min_freq 2>/dev/null | tr -d '\r\n')
+        L_MAX=$(cat /sys/devices/system/cpu/cpufreq/policy0/scaling_max_freq 2>/dev/null | tr -d '\r\n')
+
+        B_GOV=$(cat /sys/devices/system/cpu/cpufreq/policy6/scaling_governor 2>/dev/null | tr -d '\r\n')
+        B_CUR=$(cat /sys/devices/system/cpu/cpufreq/policy6/scaling_cur_freq 2>/dev/null | tr -d '\r\n')
+        B_MIN=$(cat /sys/devices/system/cpu/cpufreq/policy6/scaling_min_freq 2>/dev/null | tr -d '\r\n')
+        B_MAX=$(cat /sys/devices/system/cpu/cpufreq/policy6/scaling_max_freq 2>/dev/null | tr -d '\r\n')
+
+        G_MIN=$(cat /sys/module/ged/parameters/gpu_bottom_freq 2>/dev/null | tr -d '\r\n')
+        G_MAX=$(cat /sys/module/ged/parameters/gpu_cust_upbound_freq 2>/dev/null | tr -d '\r\n')
+        G_BOOST=$(cat /sys/module/ged/parameters/ged_boost_enable 2>/dev/null | tr -d '\r\n')
+        G_BOOST_FREQ=$(cat /sys/module/ged/parameters/gpu_cust_boost_freq 2>/dev/null | tr -d '\r\n')
+        G_OPP=$(cat /proc/gpufreqv2/fix_target_opp_index 2>/dev/null | tr -d '\r\n')
+
+        U_MIN=$(cat /dev/cpuctl/top-app/cpu.uclamp.min 2>/dev/null | tr -d '\r\n')
+        U_MAX=$(cat /dev/cpuctl/top-app/cpu.uclamp.max 2>/dev/null | tr -d '\r\n')
+        U_LAT=$(cat /dev/cpuctl/top-app/cpu.uclamp.latency_sensitive 2>/dev/null | tr -d '\r\n')
+        BORE_SCALE=$(sysctl -n kernel.sched_burst_penalty_scale 2>/dev/null | tr -d '\r\n')
+        SCHED_RATE=$(cat /sys/devices/system/cpu/cpufreq/policy0/schedutil/rate_limit_us 2>/dev/null | tr -d '\r\n')
+        TS_RAW=$(cat /proc/trans_scheduler/enable 2>/dev/null | tr -d '\r\n')
+        TS_LT=$(cat /proc/trans_scheduler/lock_tuner 2>/dev/null | tr -d '\r\n')
+        TS_EN="false"
+        if echo "$TS_RAW" | grep -qE "7ff|2047|0x1|1"; then
+            TS_EN="true"
+        fi
+
+        BAT_LVL=$(cat /sys/class/power_supply/battery/capacity 2>/dev/null | tr -d '\r\n')
+        [ -z "$BAT_LVL" ] && BAT_LVL="0"
+        BAT_TEMP_RAW=$(cat /sys/class/power_supply/battery/temp 2>/dev/null | tr -d '\r\n')
+        BAT_TEMP="0"
+        if [ -n "$BAT_TEMP_RAW" ] && [ "$BAT_TEMP_RAW" -gt 0 ] 2>/dev/null; then
+            BAT_TEMP=$((BAT_TEMP_RAW / 10))
+        fi
+        CPU_TEMP_RAW=$(cat /sys/devices/virtual/thermal/thermal_zone0/temp 2>/dev/null | tr -d '\r\n')
+        CPU_TEMP="0"
+        if [ -n "$CPU_TEMP_RAW" ] && [ "$CPU_TEMP_RAW" -gt 0 ] 2>/dev/null; then
+            CPU_TEMP=$((CPU_TEMP_RAW / 1000))
+        fi
+
+        WEB_RUN="false"
+        if pgrep -f "httpd -p [0-9.]*:8088" >/dev/null 2>&1; then
+            WEB_RUN="true"
+        fi
+        WLAN_IP="127.0.0.1"
+
+        printf '{"daemon":{"running":%s,"pid":"%s"},"manual_lock":"%s","foreground":"%s","active_profile":"%s","cpu_little":{"gov":"%s","cur":%s,"min":%s,"max":%s},"cpu_big":{"gov":"%s","cur":%s,"min":%s,"max":%s},"gpu":{"min":%s,"max":%s,"boost":"%s","boost_freq":%s,"opp":"%s"},"uclamp":{"min":"%s","max":"%s","latency":"%s"},"bore":{"scale":"%s"},"schedutil":{"rate_limit_us":%s},"trans_sched":{"enabled":%s,"raw":"%s","lock_tuner":"%s"},"battery":{"level":%s,"temp":%s},"thermal":{"cpu":%s},"web_server":{"running":%s,"port":8088,"ip":"%s"}}\n' \
+            "$D_RUN" "$D_PID" "$MAN_LOCK" "$FG_PKG" "$ACT_PROF" \
+            "${L_GOV:-unk}" "${L_CUR:-0}" "${L_MIN:-0}" "${L_MAX:-0}" \
+            "${B_GOV:-unk}" "${B_CUR:-0}" "${B_MIN:-0}" "${B_MAX:-0}" \
+            "${G_MIN:-0}" "${G_MAX:-0}" "${G_BOOST:-0}" "${G_BOOST_FREQ:-0}" "${G_OPP:--1}" \
+            "${U_MIN:-0}" "${U_MAX:-0}" "${U_LAT:-0}" "${BORE_SCALE:-0}" \
+            "${SCHED_RATE:-1000}" "${TS_EN}" "${TS_RAW:-0x0}" "${TS_LT:-0x7}" \
+            "${BAT_LVL:-0}" "${BAT_TEMP:-0}" "${CPU_TEMP:-0}" \
+            "$WEB_RUN" "$WLAN_IP"
+        ;;
+
+    trans_sched)
+        SUB="$2"
+        case "$SUB" in
+            on|1)
+                echo 2047 > /proc/trans_scheduler/enable 2>/dev/null
+                echo 7 > /proc/trans_scheduler/lock_tuner 2>/dev/null
+                echo "[OK] Transsion Scheduler enabled (0x7FF Full Boost)"
+                ;;
+            off|0)
+                echo 0 > /proc/trans_scheduler/enable 2>/dev/null
+                echo "[OK] Transsion Scheduler disabled (0x00 Eco)"
+                ;;
+            toggle)
+                RAW=$(cat /proc/trans_scheduler/enable 2>/dev/null)
+                if echo "$RAW" | grep -qE "7ff|2047"; then
+                    echo 0 > /proc/trans_scheduler/enable 2>/dev/null
+                    echo "[OK] Transsion Scheduler toggled OFF (0x00)"
+                else
+                    echo 2047 > /proc/trans_scheduler/enable 2>/dev/null
+                    echo 7 > /proc/trans_scheduler/lock_tuner 2>/dev/null
+                    echo "[OK] Transsion Scheduler toggled ON (0x7FF)"
+                fi
+                ;;
+            status|*)
+                cat /proc/trans_scheduler/enable 2>/dev/null
+                ;;
+        esac
+        ;;
+
+    web)
+        SUB="$2"
+        BUSYBOX="/data/adb/ksu/bin/busybox"
+        [ ! -x "$BUSYBOX" ] && BUSYBOX="/data/adb/magisk/busybox"
+        [ ! -x "$BUSYBOX" ] && BUSYBOX="/data/adb/ap/bin/busybox"
+        [ ! -x "$BUSYBOX" ] && BUSYBOX="$(which busybox 2>/dev/null)"
+
+        case "$SUB" in
+            on|start)
+                rm -f "$BASE_DIR/web_server_disabled"
+                pkill -f "httpd -p [0-9.]*:8088" 2>/dev/null
+                if [ -x "$BUSYBOX" ] && [ -d "$BASE_DIR/webroot" ]; then
+                    nohup "$BUSYBOX" httpd -p 127.0.0.1:8088 -h "$BASE_DIR/webroot" > /dev/null 2>&1 &
+                    WLAN_IP="127.0.0.1"
+                    echo "[OK] Web server aktif: http://${WLAN_IP:-127.0.0.1}:8088"
+                else
+                    echo "[Error] Busybox atau webroot tidak ditemukan"
+                fi
+                ;;
+            off|stop)
+                touch "$BASE_DIR/web_server_disabled"
+                pkill -f "httpd -p [0-9.]*:8088" 2>/dev/null
+                echo "[OK] Web server dimatikan"
+                ;;
+            toggle)
+                if pgrep -f "httpd -p [0-9.]*:8088" >/dev/null 2>&1; then
+                    sh "$0" web off
+                else
+                    sh "$0" web on
+                fi
+                ;;
+            status|*)
+                if pgrep -f "httpd -p [0-9.]*:8088" >/dev/null 2>&1; then
+                    WLAN_IP="127.0.0.1"
+                    echo "[Web Server] STATUS: RUNNING (http://${WLAN_IP:-127.0.0.1}:8088)"
+                else
+                    echo "[Web Server] STATUS: STOPPED (Remote website access disabled)"
+                fi
+                ;;
+        esac
+        ;;
+
+    set)
+        PKG="$2"
+        PROF="$3"
+        if [ -z "$PKG" ] || [ -z "$PROF" ]; then
+            echo "Usage: tkm set <package_name> <gaming|performance|balanced|battery|powersave>"
+            exit 1
+        fi
+        clear_overrides "$PKG"
+        sed -i "/^${PKG}=/d" "$CONFIG_FILE"
+        echo "${PKG}=${PROF}" >> "$CONFIG_FILE"
+        touch "$BASE_DIR/reload_trigger"
+        echo "[OK] Rule added: $PKG -> $PROF (Hot-reloaded)"
+        ;;
+
+    switchlog)
+        LINES="${2:-200}"
+        SW_LOG="$BASE_DIR/switch.log"
+        if [ -s "$SW_LOG" ]; then
+            tail -n "$LINES" "$SW_LOG"
+        else
+            echo "Belum ada catatan switch log (dikosongkan otomatis tiap 30 menit)."
+        fi
+        ;;
+
+    set_type)
+        TYPE="$2"
+        shift 2
+        case "$TYPE" in
+            user|system) ;;
+            *) echo "Usage: tkm set_type <user|system> <pkg1> [pkg2 ...]"; exit 1 ;;
+        esac
+        [ $# -eq 0 ] && { echo "Usage: tkm set_type <user|system> <pkg1> [pkg2 ...]"; exit 1; }
+        [ -f "$TYPE_FILE" ] || printf '# Penanda jenis aplikasi untuk perapp.conf\n# Format: <package_name>=<user|system>\n' > "$TYPE_FILE"
+        SED_ARGS=""
+        APPEND_STR=""
+        N=0
+        for p in "$@"; do
+            case "$p" in
+                ''|*[!A-Za-z0-9._]*) continue ;;
+            esac
+            clear_overrides "$p"
+            SED_ARGS="${SED_ARGS} -e /^${p}=/d"
+            APPEND_STR="${APPEND_STR}${p}=${TYPE}\n"
+            N=$((N + 1))
+        done
+        if [ "$N" -gt 0 ]; then
+            sed -i $SED_ARGS "$TYPE_FILE"
+            printf "%b" "$APPEND_STR" >> "$TYPE_FILE"
+        fi
+        echo "[OK] Marked $N app(s) as $TYPE"
+        ;;
+
+    get_types)
+        if [ -f "$TYPE_FILE" ]; then
+            awk -F '=' '
+                { sub(/\r$/, "") }
+                /^[ \t]*#/ || NF < 2 { next }
+                { k=$1; v=$2; gsub(/^[ \t]+|[ \t]+$/, "", k); gsub(/^[ \t]+|[ \t]+$/, "", v) }
+                v == "user" || v == "system" { t[k] = v }
+                END {
+                    printf "{"
+                    first = 1
+                    for (k in t) { if (!first) printf ","; printf "\"%s\":\"%s\"", k, t[k]; first = 0 }
+                    printf "}\n"
+                }
+            ' "$TYPE_FILE"
+        else
+            echo "{}"
+        fi
+        ;;
+
+    set_batch)
+        PROF="$2"
+        shift 2
+        if [ -z "$PROF" ] || [ $# -eq 0 ]; then
+            echo "Usage: tkm set_batch <profile> <pkg1> [pkg2 ...]"
+            exit 1
+        fi
+        SED_ARGS=""
+        APPEND_STR=""
+        for p in "$@"; do
+            [ -z "$p" ] && continue
+            clear_overrides "$p"
+            SED_ARGS="${SED_ARGS} -e /^${p}=/d"
+            APPEND_STR="${APPEND_STR}${p}=${PROF}\n"
+        done
+        if [ -n "$SED_ARGS" ]; then
+            sed -i $SED_ARGS "$CONFIG_FILE"
+            printf "%b" "$APPEND_STR" >> "$CONFIG_FILE"
+            touch "$BASE_DIR/reload_trigger"
+            echo "[OK] Batch added $# rules -> $PROF (Hot-reloaded)"
+        fi
+        ;;
+
+    set_custom)
+        PKG="$2"
+        L_GOV="${3:-schedutil}"
+        L_MIN="${4:-500000}"
+        L_MAX="${5:-2000000}"
+        B_GOV="${6:-schedutil}"
+        B_MIN="${7:-725000}"
+        B_MAX="${8:-2200000}"
+        G_MIN="${9:-390000}"
+        G_MAX="${10:-1100000}"
+        G_BOOST="${11:-0}"
+        U_LAT="${12:-0}"
+        BORE="${13:-1280}"
+        G_BOOST_FREQ="${14:-990000}"
+        TRANS_SCHED="${15:-1}"
+        SCHED_RATE="${16:-500}"
+        G_LOCK_OPP="${17:--1}"
+        U_MIN="${18:-10.00}"
+        U_MAX="${19:-100.00}"
+        GAME_MODE="${20:-0}"
+        REFRESH_RATE="${21:-0}"
+        EAS_ENABLE="${22:-1}"
+        BG_CPUS="${23:-0-3}"
+        GPU_DVFS="${24:-1}"
+        TCP_CONG="${25:-cubic}"
+        SWAPPINESS="${26:-100}"
+        TRANS_LOCK_TUNER="${27:-7}"
+
+        if [ -z "$PKG" ]; then
+            echo "Usage: tkm set_custom <pkg> [l_gov] [l_min] [l_max] [b_gov] [b_min] [b_max] [gpu_min] [gpu_max] [gpu_boost] [u_lat] [bore] [gpu_boost_freq] [trans_sched] [sched_rate] [gpu_lock_opp] [uclamp_min] [uclamp_max] [game_mode] [refresh_rate] [eas_enable] [bg_cpus] [gpu_dvfs] [tcp_cong] [swappiness] [trans_lock_tuner]"
+            exit 1
+        fi
+
+        PROF="custom_$(echo "$PKG" | tr '.' '_')"
+
+        if [ -f "$PROFILES_FILE" ]; then
+            awk -v sec="[$PROF]" '
+                $0 == sec { skip=1; next }
+                skip && /^\[/ { skip=0 }
+                !skip { print }
+            ' "$PROFILES_FILE" > "$PROFILES_FILE.tmp" && mv "$PROFILES_FILE.tmp" "$PROFILES_FILE"
+        fi
+
+        cat << EOF >> "$PROFILES_FILE"
+
+[$PROF]
+NAME=Custom ($PKG)
+CPU_L_GOV=$L_GOV
+CPU_L_MIN=$L_MIN
+CPU_L_MAX=$L_MAX
+CPU_B_GOV=$B_GOV
+CPU_B_MIN=$B_MIN
+CPU_B_MAX=$B_MAX
+GPU_MIN=$G_MIN
+GPU_MAX=$G_MAX
+GPU_BOOST=$G_BOOST
+GPU_BOOST_FREQ=$G_BOOST_FREQ
+GPU_LOCK_OPP=$G_LOCK_OPP
+UCLAMP_MIN=$U_MIN
+UCLAMP_MAX=$U_MAX
+UCLAMP_LATENCY=$U_LAT
+BORE_SCALE=$BORE
+TRANS_SCHED=$TRANS_SCHED
+TRANS_LOCK_TUNER=$TRANS_LOCK_TUNER
+SCHED_RATE=$SCHED_RATE
+GAME_MODE=$GAME_MODE
+REFRESH_RATE=$REFRESH_RATE
+EAS_ENABLE=$EAS_ENABLE
+BG_CPUS=$BG_CPUS
+GPU_DVFS=$GPU_DVFS
+TCP_CONG=$TCP_CONG
+SWAPPINESS=$SWAPPINESS
+EOF
+
+        clear_overrides "$PKG"
+        sed -i "/^${PKG}=/d" "$CONFIG_FILE"
+        echo "${PKG}=${PROF}" >> "$CONFIG_FILE"
+        touch "$BASE_DIR/reload_trigger"
+        echo "[OK] Configured custom profile for $PKG (Profile: $PROF, Hot-reloaded)"
+        ;;
+
+    get_app_config)
+        PKG="$2"
+        PROF=""
+        if [ -f "$CONFIG_FILE" ]; then
+            PROF=$(grep -E "^${PKG}=" "$CONFIG_FILE" | head -n 1 | cut -d '=' -f 2 | tr -d '\r \t')
+        fi
+        [ -z "$PROF" ] && PROF="balanced"
+
+        load_defaults
+        load_section "$PROF"
+        load_overrides "$PKG"
+
+        IS_CUSTOM="false"
+        case "$PROF" in
+            custom_*) IS_CUSTOM="true" ;;
+        esac
+
+        printf '{"pkg":"%s","profile":"%s","is_custom":%s,"l_gov":"%s","l_min":%s,"l_max":%s,"b_gov":"%s","b_min":%s,"b_max":%s,"gpu_min":%s,"gpu_max":%s,"gpu_boost":"%s","gpu_boost_freq":%s,"gpu_lock_opp":"%s","trans_sched":"%s","sched_rate":%s,"uclamp_min":"%s","uclamp_max":"%s","uclamp_latency":"%s","bore":"%s","game_mode":"%s","refresh_rate":"%s","eas_enable":"%s","bg_cpus":"%s","gpu_dvfs":"%s","tcp_cong":"%s","swappiness":"%s","trans_lock_tuner":"%s","has_override":%s}\n' \
+            "$PKG" "$PROF" "$IS_CUSTOM" "$L_GOV" "$L_MIN" "$L_MAX" "$B_GOV" "$B_MIN" "$B_MAX" "$GPU_MIN" "$GPU_MAX" "$GPU_BOOST" "$GPU_BOOST_FREQ" "$G_LOCK_OPP" "$TRANS_SCHED" "$SCHED_RATE" "$U_MIN" "$U_MAX" "$U_LAT" "$BORE" \
+            "$GAME_MODE" "$REFRESH_RATE" "$EAS_ENABLE" "$BG_CPUS" "$GPU_DVFS" "$TCP_CONG" "$SWAPPINESS" "$TRANS_LOCK_TUNER" "$OV_COUNT"
+        ;;
+
+    remove)
+        PKG="$2"
+        if [ -z "$PKG" ]; then
+            echo "Usage: tkm remove <package_name>"
+            exit 1
+        fi
+        OLD_PROF=$(grep -E "^${PKG}=" "$CONFIG_FILE" | head -n 1 | cut -d '=' -f 2 | tr -d '\r \t')
+        clear_overrides "$PKG"
+        sed -i "/^${PKG}=/d" "$CONFIG_FILE"
+        [ -f "$TYPE_FILE" ] && sed -i "/^${PKG}=/d" "$TYPE_FILE"
+        if [ -n "$OLD_PROF" ] && echo "$OLD_PROF" | grep -q "^custom_"; then
+            if [ -f "$PROFILES_FILE" ]; then
+                awk -v sec="[$OLD_PROF]" '
+                    $0 == sec { skip=1; next }
+                    skip && /^\[/ { skip=0 }
+                    !skip { print }
+                ' "$PROFILES_FILE" > "$PROFILES_FILE.tmp" && mv "$PROFILES_FILE.tmp" "$PROFILES_FILE"
+            fi
+        fi
+        touch "$BASE_DIR/reload_trigger"
+        echo "[OK] Removed rule for $PKG (Hot-reloaded)"
+        ;;
+
+    expand)
+        PKG="$2"
+        if [ -z "$PKG" ]; then
+            echo "Usage: tkm expand <package_name>   (tulis semua fitur app ke perapp.conf)"
+            exit 1
+        fi
+        [ -f "$CONFIG_FILE" ] || touch "$CONFIG_FILE"
+        expand_pkg "$PKG"
+        touch "$BASE_DIR/reload_trigger"
+        echo "[OK] Semua fitur $PKG ditulis ke perapp.conf (edit lalu simpan, otomatis diterapkan)"
+        ;;
+
+    expand_user)
+        [ -f "$CONFIG_FILE" ] || touch "$CONFIG_FILE"
+        N=0
+        if [ -f "$TYPE_FILE" ]; then
+            for P in $(grep -E '=user$' "$TYPE_FILE" | cut -d '=' -f 1 | tr -d '\r'); do
+                expand_pkg "$P"
+                N=$((N + 1))
+            done
+        fi
+        touch "$BASE_DIR/reload_trigger"
+        echo "[OK] Detail fitur ditulis untuk $N aplikasi user"
+        ;;
+
+    unexpand)
+        PKG="$2"
+        if [ -z "$PKG" ]; then
+            echo "Usage: tkm unexpand <package_name>   (hapus override, kembali ikut mode)"
+            exit 1
+        fi
+        clear_overrides "$PKG"
+        touch "$BASE_DIR/reload_trigger"
+        echo "[OK] Override $PKG dihapus, kembali ikut mode"
+        ;;
+
+    show)
+        PKG="$2"
+        if [ -z "$PKG" ]; then
+            echo "Usage: tkm show <package_name>"
+            exit 1
+        fi
+        PROF=$(rule_profile "$PKG")
+        load_defaults
+        load_section "$PROF"
+        load_overrides "$PKG"
+        echo "App    : $PKG"
+        echo "Mode   : $PROF"
+        echo "Override: $OV_COUNT nilai (ditandai *)"
+        for K in $ALL_KEYS; do
+            get_key "$K"
+            MARK=" "
+            case "$OV_KEYS" in *" $K "*) MARK="*" ;; esac
+            printf '%s %-18s = %s\n' "$MARK" "$K" "$KV"
+        done
+        [ -n "$OV_BAD" ] && echo "PERINGATAN: key tidak dikenal diabaikan: $OV_BAD"
+        ;;
+
+    keys)
+        echo "$ALL_KEYS" | tr ' ' '\n'
+        ;;
+
+    list)
+        echo "--- Configured App Rules ($CONFIG_FILE) ---"
+        if [ -f "$CONFIG_FILE" ]; then
+            grep -v '^#' "$CONFIG_FILE" | grep -v '^[[:space:]]*$'
+        else
+            echo "No rules found."
+        fi
+        ;;
+
+    list_json)
+        awk -F '=' '
+            FILENAME == ARGV[1] {
+                line = $0
+                gsub(/\r/, "", line); sub(/^[ \t\xef\xbb\xbf]+/, "", line); sub(/[ \t]+$/, "", line)
+                if (line ~ /^\[.*\]$/) {
+                    sec = substr(line, 2, length(line)-2)
+                } else if (sec != "") {
+                    k = $1; sub(/^[ \t\xef\xbb\xbf]+/, "", k); sub(/[ \t]+$/, "", k)
+                    v = $2; sub(/^[ \t]+/, "", v); sub(/[ \t]+$/, "", v)
+                    if (k == "CPU_L_MAX") l_max[sec] = v
+                    else if (k == "CPU_B_MAX") b_max[sec] = v
+                    else if (k == "GPU_MAX") gpu_max[sec] = v
+                    else if (k == "TRANS_SCHED") ts[sec] = v
+                    else if (k == "GPU_BOOST") gb[sec] = v
+                    else if (k == "SCHED_RATE") sr[sec] = v
+                    else if (k == "UCLAMP_LATENCY") ulat[sec] = v
+                    else if (k == "REFRESH_RATE") rr[sec] = v
+                    else if (k == "GAME_MODE") gm_mode[sec] = v
+                    else if (k == "EAS_ENABLE") eas[sec] = v
+                    else if (k == "BG_CPUS") bg[sec] = v
+                    else if (k == "GPU_DVFS") dvfs[sec] = v
+                    else if (k == "TCP_CONG") tcp[sec] = v
+                    else if (k == "SWAPPINESS") swp[sec] = v
+                    else if (k == "TRANS_LOCK_TUNER") ts_lt[sec] = v
+                }
+                next
+            }
+            FILENAME == ARGV[2] {
+                line = $0
+                gsub(/\r/, "", line); sub(/^[ \t\xef\xbb\xbf]+/, "", line); sub(/[ \t]+$/, "", line)
+                if (line == "" || line ~ /^#/) next
+                k = $1; sub(/^[ \t\xef\xbb\xbf]+/, "", k); sub(/[ \t]+$/, "", k)
+                v = $2; sub(/^[ \t]+/, "", v); sub(/[ \t]+$/, "", v)
+                if (k == "DEFAULT") {
+                    def = v
+                    next
+                }
+                if (index(k, ":") > 0) {
+                    c = index(k, ":")
+                    op = substr(k, 1, c - 1); ok = substr(k, c + 1)
+                    ov[op "|" ok] = v
+                    ovn[op]++
+                    next
+                }
+                n++
+                pkg[n] = k
+                prof[n] = v
+                seen[k] = 1
+            }
+            END {
+                if (def == "") def = "balanced"
+                for (op in ovn) if (!(op in seen)) { n++; pkg[n] = op; prof[n] = def }
+                printf "{\"default\":\"%s\",\"rules\":[", def
+                for (i = 1; i <= n; i++) {
+                    p = pkg[i]
+                    pr = prof[i]
+                    is_c = (pr ~ /^custom_/) ? "true" : "false"
+                    lm = (pr in l_max) ? l_max[pr] : "0"
+                    bm = (pr in b_max) ? b_max[pr] : "0"
+                    gm = (pr in gpu_max) ? gpu_max[pr] : "0"
+                    ts_val = (pr in ts) ? ts[pr] : "1"
+                    gb_val = (pr in gb) ? gb[pr] : "0"
+                    sr_val = (pr in sr) ? sr[pr] : "1000"
+                    ulat_val = (pr in ulat) ? ulat[pr] : "0"
+                    rr_val = (pr in rr) ? rr[pr] : "0"
+                    gm_val = (pr in gm_mode) ? gm_mode[pr] : "0"
+                    eas_val = (pr in eas) ? eas[pr] : "1"
+                    bg_val = (pr in bg) ? bg[pr] : "0-3"
+                    dvfs_val = (pr in dvfs) ? dvfs[pr] : "1"
+                    tcp_val = (pr in tcp) ? tcp[pr] : "cubic"
+                    swp_val = (pr in swp) ? swp[pr] : "100"
+                    ts_lt_val = (pr in ts_lt) ? ts_lt[pr] : "7"
+                    if ((p "|CPU_L_MAX") in ov) lm = ov[p "|CPU_L_MAX"]
+                    if ((p "|CPU_B_MAX") in ov) bm = ov[p "|CPU_B_MAX"]
+                    if ((p "|GPU_MAX") in ov) gm = ov[p "|GPU_MAX"]
+                    if ((p "|TRANS_SCHED") in ov) ts_val = ov[p "|TRANS_SCHED"]
+                    if ((p "|GPU_BOOST") in ov) gb_val = ov[p "|GPU_BOOST"]
+                    if ((p "|SCHED_RATE") in ov) sr_val = ov[p "|SCHED_RATE"]
+                    if ((p "|UCLAMP_LATENCY") in ov) ulat_val = ov[p "|UCLAMP_LATENCY"]
+                    if ((p "|REFRESH_RATE") in ov) rr_val = ov[p "|REFRESH_RATE"]
+                    if ((p "|GAME_MODE") in ov) gm_val = ov[p "|GAME_MODE"]
+                    if ((p "|EAS_ENABLE") in ov) eas_val = ov[p "|EAS_ENABLE"]
+                    if ((p "|BG_CPUS") in ov) bg_val = ov[p "|BG_CPUS"]
+                    if ((p "|GPU_DVFS") in ov) dvfs_val = ov[p "|GPU_DVFS"]
+                    if ((p "|TCP_CONG") in ov) tcp_val = ov[p "|TCP_CONG"]
+                    if ((p "|SWAPPINESS") in ov) swp_val = ov[p "|SWAPPINESS"]
+                    ovc = (p in ovn) ? ovn[p] : 0
+                    if (i > 1) printf ","
+                    printf "{\"pkg\":\"%s\",\"profile\":\"%s\",\"is_custom\":%s,\"l_max\":\"%s\",\"b_max\":\"%s\",\"gpu_max\":\"%s\",\"trans_sched\":\"%s\",\"gpu_boost\":\"%s\",\"sched_rate\":\"%s\",\"uclamp_lat\":\"%s\",\"refresh_rate\":\"%s\",\"game_mode\":\"%s\",\"eas_enable\":\"%s\",\"bg_cpus\":\"%s\",\"gpu_dvfs\":\"%s\",\"tcp_cong\":\"%s\",\"swappiness\":\"%s\",\"overrides\":%s}", p, pr, is_c, lm, bm, gm, ts_val, gb_val, sr_val, ulat_val, rr_val, gm_val, eas_val, bg_val, dvfs_val, tcp_val, swp_val, ovc
+                }
+                printf "]}\n"
+            }
+        ' "$PROFILES_FILE" "$CONFIG_FILE"
+        ;;
+
+    force)
+        PROF="$2"
+        if [ -z "$PROF" ]; then
+            echo "Usage: tkm force <gaming|performance|balanced|battery|powersave>"
+            exit 1
+        fi
+        echo "$PROF" > "$BASE_DIR/manual_override"
+        sh "$ENGINE" "$PROF"
+        echo "[OK] Locked profile to: $PROF"
+        ;;
+
+    unforce)
+        rm -f "$BASE_DIR/manual_override"
+        touch "$BASE_DIR/reload_trigger"
+        echo "[OK] Unlocked manual lock. Restored dynamic per-app mode."
+        ;;
+
+    reload)
+        touch "$BASE_DIR/reload_trigger"
+        echo "[OK] Triggered config reload."
+        ;;
+
+    test)
+        PROF="$2"
+        if [ -z "$PROF" ]; then
+            echo "Usage: tkm test <profile_name>"
+            exit 1
+        fi
+        sh "$ENGINE" "$PROF"
+        echo "[OK] Applied profile $PROF. Verifying status:"
+        sh "$0" status
+        ;;
+
+    restart)
+        PID=$(cat "$PIDFILE" 2>/dev/null)
+        [ -n "$PID" ] && kill -9 "$PID" 2>/dev/null
+        rm -f "$PIDFILE"
+        nohup sh "$BASE_DIR/daemon.sh" > /dev/null 2>&1 &
+        sleep 1
+        echo "[OK] Daemon restarted."
+        ;;
+
+    log)
+        LINES="${2:-50}"
+        if [ -f "$BASE_DIR/history.log" ]; then
+            echo "--- Recent Profile History (Last $LINES lines) ---"
+            tail -n "$LINES" "$BASE_DIR/history.log"
+        else
+            echo "No history log found yet."
+        fi
+        ;;
+
+    clearlog)
+        echo "" > "$BASE_DIR/history.log"
+        echo "[OK] Cleared history log."
+        ;;
+
+    get_installed_apps)
+        MODE="${2:-json}"
+        case "$MODE" in
+            user|-3)
+                pm list packages -3 2>/dev/null | sed 's/package://' | sort
+                ;;
+            system|-s)
+                pm list packages -s 2>/dev/null | sed 's/package://' | sort
+                ;;
+            all)
+                pm list packages 2>/dev/null | sed 's/package://' | sort
+                ;;
+            json|*)
+                U_JSON=$(pm list packages -3 2>/dev/null | sed 's/package://' | sort | awk 'BEGIN{printf "["} NR>1{printf ","} {printf "\"%s\"", $0} END{printf "]"}')
+                S_JSON=$(pm list packages -s 2>/dev/null | sed 's/package://' | sort | awk 'BEGIN{printf "["} NR>1{printf ","} {printf "\"%s\"", $0} END{printf "]"}')
+                printf '{"user":%s,"system":%s}\n' "${U_JSON:-[]}" "${S_JSON:-[]}"
+                ;;
+        esac
+        ;;
+
+    help|*)
+        echo "Transsion MT6789 Kernel Manager CLI"
+        echo "Usage: tkm <command> [args]"
+        echo ""
+        echo "Commands:"
+        echo "  status                       Live audit of CPU, GPU, UCLAMP, BORE & FG app"
+        echo "  json                         Live audit in machine-readable JSON format"
+        echo "  trans_sched [on|off|toggle]  Toggle or view Transsion in-kernel scheduler"
+        echo "  web [on|off|toggle|status]   Toggle HTTP Web Server (127.0.0.1:8088, laptop via adb forward tcp:8088 tcp:8088)"
+        echo "  set <pkg> <profile>          Add/update per-app profile rule"
+        echo "  remove <pkg>                 Remove per-app rule"
+        echo "  list                         List all configured per-app rules"
+        echo "  list_json                    List all rules as JSON"
+        echo "  force <profile>              Manually lock a profile (disables dynamic switch)"
+        echo "  unforce                      Restore dynamic per-app mode"
+        echo "  reload                       Hot-reload configuration on the fly"
+        echo "  test <profile>               Test-apply profile immediately and verify"
+        echo "  restart                      Restart background daemon"
+        echo "  log [lines]                  View profile switch history"
+        echo "  clearlog                     Clear profile switch history"
+        echo "  get_installed_apps [mode]    List packages (json, user, system, all)"
+        echo "  switchlog [lines]            View app switch log (auto-cleared every 30 min)"
+        echo "  set_type <user|system> <pkg...>  Mark app type in perapp_type.conf"
+        echo "  get_types                    Show app type marks (JSON)"
+        echo ""
+        echo "Profiles: gaming, performance, balanced, battery, powersave"
+        ;;
+esac
